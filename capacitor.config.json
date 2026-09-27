@@ -1,0 +1,45 @@
+{
+  "appId": "com.repsandsteps.app",
+  "appName": "RepsAndSteps",
+  "webDir": "www",
+  "server": {
+    "url": "https://repsandstepsartp.base44.app",
+    "androidScheme": "https",
+    "cleartext": false,
+    "allowNavigation": [
+      "repsandsteps.com",
+      "*.repsandsteps.com",
+      "*.base44.app",
+      "*.base44.com",
+      "*.stripe.com",
+      "checkout.stripe.com",
+      "js.stripe.com",
+      "*.calendly.com",
+      "*.googleapis.com",
+      "*.gstatic.com",
+      "cdn.jsdelivr.net"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "appendUserAgent": "RepsAndStepsApp/1.0",
+    "backgroundColor": "#0A0A0A"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "launchAutoHide": true,
+      "backgroundColor": "#0A0A0A",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": true,
+      "spinnerColor": "#00E5FF"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0A0A0A"
+    }
+  }
+}

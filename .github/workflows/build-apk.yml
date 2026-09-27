@@ -1,0 +1,153 @@
+name: Build RepsAndSteps APK
+
+# Builds on GitHub's Ubuntu runner, which ships a working Android SDK.
+# Run it by hand from the Actions tab, or push a tag (v1.0.0) to cut a release.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version name to stamp on the build (e.g. 1.0.1)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # Java 17, not 21: Capacitor 6 ships Gradle 8.2, which rejects Java 21.
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # android/ is intentionally not committed — it is generated here every run.
+      - name: Generate the Android project
+        run: npx --yes cap add android
+
+      # Launcher icons and splash are pre-rendered in resources/android-res.
+      # @capacitor/assets is NOT used: its `sharp` dependency has no prebuilt
+      # binary for current Node and fails to install.
+      - name: Apply icons and splash
+        run: cp -r resources/android-res/. android/app/src/main/res/
+
+      - name: Patch AndroidManifest (camera, wake lock)
+        run: node scripts/patch-android.js
+
+      - name: Stamp version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then VERSION="1.0.$GITHUB_RUN_NUMBER"; fi
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          sed -i "s/versionName .*/versionName \"$VERSION\"/"      android/app/build.gradle
+          sed -i "s/versionCode .*/versionCode $GITHUB_RUN_NUMBER/" android/app/build.gradle
+          echo "Building version $VERSION (code $GITHUB_RUN_NUMBER)"
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Restore signing keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "have_keystore=true" >> $GITHUB_OUTPUT
+            echo "Keystore restored."
+          else
+            echo "have_keystore=false" >> $GITHUB_OUTPUT
+            echo "No KEYSTORE_BASE64 secret set - debug build only."
+          fi
+
+      - name: Build and sign release APK
+        if: ${{ steps.keystore.outputs.have_keystore == 'true' }}
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew assembleRelease
+          BT=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          UNSIGNED=app/build/outputs/apk/release/app-release-unsigned.apk
+          [ -f "$UNSIGNED" ] || UNSIGNED=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/$BT/zipalign" -p -f 4 "$UNSIGNED" aligned.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" sign \
+            --ks "$RUNNER_TEMP/release.keystore" \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "../RepsAndSteps-${APP_VERSION}.apk" aligned.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "../RepsAndSteps-${APP_VERSION}.apk"
+
+      - name: Name the debug build
+        run: |
+          if [ ! -f "RepsAndSteps-${APP_VERSION}.apk" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk "RepsAndSteps-${APP_VERSION}-debug.apk"
+            echo "::warning::No signing keystore configured - only a DEBUG apk was produced."
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk "RepsAndSteps-${APP_VERSION}-debug.apk"
+          fi
+
+      - name: Write app-version.json
+        run: |
+          APK=$(ls -1 RepsAndSteps-*.apk | grep -v debug | head -1 || ls -1 RepsAndSteps-*.apk | head -1)
+          SIZE=$(awk "BEGIN{printf \"%.1f\", $(stat -c%s "$APK")/1048576}")
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          cat > app-version.json <<JSON
+          {
+            "versionName": "${APP_VERSION}",
+            "versionCode": ${GITHUB_RUN_NUMBER},
+            "releasedAt": "$(date -u +%Y-%m-%d)",
+            "apkUrl": "/downloads/repsandsteps-latest.apk",
+            "sizeMB": ${SIZE},
+            "minAndroid": "7.0",
+            "sha256": "${SHA}",
+            "notes": ["Build ${APP_VERSION} from ${GITHUB_SHA::7}"]
+          }
+          JSON
+          cat app-version.json
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: repsandsteps-apk
+          path: |
+            RepsAndSteps-*.apk
+            app-version.json
+          retention-days: 90
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            RepsAndSteps-*.apk
+            app-version.json
+          body: |
+            RepsAndSteps Android build `${{ env.APP_VERSION }}`.
+
+            Install page: https://repsandsteps.com/install

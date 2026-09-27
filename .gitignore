@@ -1,0 +1,23 @@
+# ─── NEVER COMMIT: signing material ───────────────────────────────
+# This repo is public. Anything below identifies the app to Google Play.
+release.keystore
+*.keystore
+*.jks
+keystore.base64.txt
+key.properties
+local.properties
+
+# ─── Generated ────────────────────────────────────────────────────
+node_modules/
+android/
+*.apk
+*.aab
+.gradle/
+build.log
+*.zip
+*.class
+
+# ─── Local-machine scratch ────────────────────────────────────────
+LoopbackTest.java
+SelectorTest.java
+loopback-test.js

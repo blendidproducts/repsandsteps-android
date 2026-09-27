@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RepsAndSteps</title>
+<style>
+  html,body{margin:0;height:100%;background:#0A0A0A;color:#E8F4F8;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .c{height:100%;display:grid;place-items:center;text-align:center;padding:28px}
+  .mark{width:86px;height:86px;border-radius:20px;margin:0 auto 22px;display:block}
+  h1{font-size:19px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 10px;font-weight:700}
+  p{color:#93A8B8;font-size:15px;margin:0 0 22px;max-width:30ch;line-height:1.5}
+  button{border:0;border-radius:12px;padding:14px 26px;font-size:15px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;background:linear-gradient(100deg,#00E5FF,#0288D1);color:#04141B}
+  .dots{display:flex;gap:6px;justify-content:center;margin-top:20px}
+  .dots i{width:7px;height:7px;border-radius:50%;background:#00E5FF;opacity:.3;animation:b 1.2s infinite}
+  .dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+  @keyframes b{0%,100%{opacity:.25}50%{opacity:1}}
+</style>
+</head>
+<body>
+  <div class="c">
+    <div>
+      <img class="mark" src="icon.png" alt="" onerror="this.style.display='none'">
+      <h1>RepsAndSteps</h1>
+      <p id="msg">Connecting…</p>
+      <button id="retry" style="display:none" onclick="location.reload()">Try again</button>
+      <div class="dots" id="dots"><i></i><i></i><i></i></div>
+    </div>
+  </div>
+<script>
+  /* This shell only appears when the phone can't reach repsandsteps.com.
+     Normally the app loads the live site straight away. */
+  setTimeout(function () {
+    document.getElementById("msg").textContent =
+      "Can't reach RepsAndSteps right now. Check your connection and try again.";
+    document.getElementById("retry").style.display = "inline-block";
+    document.getElementById("dots").style.display = "none";
+  }, 6000);
+</script>
+</body>
+</html>
