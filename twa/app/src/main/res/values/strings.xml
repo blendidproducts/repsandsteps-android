@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RepsAndSteps</string>
+    <string name="launcher_name">RepsAndSteps</string>
+
+    <!-- The URL the app opens. Change here if the app moves to a custom domain. -->
+    <string name="default_url" translatable="false">https://repsandstepsartp.base44.app/</string>
+    <string name="host_name" translatable="false">repsandstepsartp.base44.app</string>
+
+    <!-- Must match /.well-known/assetlinks.json on that host, or Chrome shows a
+         URL bar instead of running it as a verified app. -->
+    <string name="asset_statements" translatable="false">
+        [{
+          \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+          \"target\": {
+            \"namespace\": \"web\",
+            \"site\": \"https://repsandstepsartp.base44.app\"
+          }
+        }]
+    </string>
+</resources>

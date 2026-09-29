@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Lets Chrome hand downloaded files (progress photo exports, PDFs)
+         back to other apps from inside the TWA. -->
+    <files-path name="twa_files" path="." />
+    <cache-path name="twa_cache" path="." />
+    <external-path name="twa_external" path="." />
+</paths>

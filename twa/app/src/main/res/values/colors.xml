@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand near-black: status bar, nav bar and splash background -->
+    <color name="colorPrimary">#0A0A0A</color>
+    <color name="colorPrimaryDark">#0A0A0A</color>
+    <color name="navigationColor">#0A0A0A</color>
+    <color name="splashScreenBackground">#0A0A0A</color>
+    <color name="ic_launcher_background">#0088FF</color>
+</resources>

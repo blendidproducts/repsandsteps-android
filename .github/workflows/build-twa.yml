@@ -1,0 +1,129 @@
+name: Build RepsAndSteps TWA
+
+# Trusted Web Activity build. Runs the site in Chrome itself, so Google sign-in
+# works and the app shares Chrome's cookies. No URL bar once
+# /.well-known/assetlinks.json on the host matches this APK's signing key.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version name to stamp (e.g. 2.0.0)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "twa-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      # Reuse the launcher icons and splash already rendered for the Capacitor
+      # build. values/ is skipped on purpose: it defines ic_launcher_background,
+      # which twa/app/src/main/res/values/colors.xml already declares.
+      - name: Apply icons and splash
+        run: |
+          cp -r resources/android-res/mipmap-*    twa/app/src/main/res/
+          cp -r resources/android-res/drawable*   twa/app/src/main/res/
+          ls -R twa/app/src/main/res | head -40
+
+      - name: Stamp version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="${GITHUB_REF_NAME#twa-v}"; fi
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then VERSION="2.0.$GITHUB_RUN_NUMBER"; fi
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          # versionCode must climb past the Capacitor builds so this installs as an upgrade
+          CODE=$((1000 + GITHUB_RUN_NUMBER))
+          sed -i "s/versionName \".*\"/versionName \"$VERSION\"/" twa/app/build.gradle
+          sed -i "s/versionCode .*/versionCode $CODE/"            twa/app/build.gradle
+          echo "Building TWA $VERSION (code $CODE)"
+
+      - name: Build release APK
+        working-directory: twa
+        run: gradle assembleRelease --no-daemon
+
+      - name: Sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 missing. A TWA must be signed with the key listed in assetlinks.json or Chrome will show a URL bar."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/release.keystore"
+          BT=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          UNSIGNED=twa/app/build/outputs/apk/release/app-release-unsigned.apk
+          [ -f "$UNSIGNED" ] || UNSIGNED=twa/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/$BT/zipalign" -p -f 4 "$UNSIGNED" aligned.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" sign \
+            --ks "$RUNNER_TEMP/release.keystore" \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "RepsAndSteps-TWA-${APP_VERSION}.apk" aligned.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "RepsAndSteps-TWA-${APP_VERSION}.apk" | head -4
+
+      - name: Confirm the signing key matches assetlinks.json
+        run: |
+          BT=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          APK_FP=$("$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "RepsAndSteps-TWA-${APP_VERSION}.apk" \
+                   | grep -i "SHA-256 digest" | head -1 | awk '{print $NF}' | tr 'A-F' 'a-f')
+          echo "APK fingerprint : $APK_FP"
+          LIVE=$(curl -fsSL https://repsandstepsartp.base44.app/.well-known/assetlinks.json || echo "")
+          LIVE_FP=$(echo "$LIVE" | tr -d ' "\n' | grep -oiE '([0-9a-f]{2}:){31}[0-9a-f]{2}' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          echo "Site fingerprint: ${LIVE_FP:-<none found>}"
+          if [ "$APK_FP" = "$LIVE_FP" ]; then
+            echo "MATCH - Chrome will run this with no URL bar."
+          else
+            echo "::warning::assetlinks.json does not match this APK yet. The app will work but Chrome will show a URL bar until the file is published."
+          fi
+
+      - name: Write app-version.json
+        run: |
+          APK="RepsAndSteps-TWA-${APP_VERSION}.apk"
+          SIZE=$(awk "BEGIN{printf \"%.1f\", $(stat -c%s "$APK")/1048576}")
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          cat > app-version.json <<JSON
+          {
+            "versionName": "${APP_VERSION}",
+            "versionCode": $((1000 + GITHUB_RUN_NUMBER)),
+            "releasedAt": "$(date -u +%Y-%m-%d)",
+            "apkUrl": "/downloads/repsandsteps-latest.apk",
+            "sizeMB": ${SIZE},
+            "minAndroid": "5.0",
+            "sha256": "${SHA}",
+            "notes": ["TWA build ${APP_VERSION} from ${GITHUB_SHA::7}"]
+          }
+          JSON
+          cat app-version.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: repsandsteps-twa
+          path: |
+            RepsAndSteps-TWA-*.apk
+            app-version.json
+          retention-days: 90
