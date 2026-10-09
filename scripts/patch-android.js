@@ -3,6 +3,7 @@
    inside the shell. Safe to run repeatedly — every edit is idempotent.
 
    1. CAMERA permission  -> ARTP rep tracking (MediaPipe) can open the camera
+      RECORD_AUDIO       -> set recording with sound, voice commands
    2. Hardware feature   -> declared optional so the Play Store doesn't hide the
                             app from tablets without a rear camera
    3. Screen-on          -> the phone doesn't sleep mid-set
@@ -23,6 +24,11 @@ let changed = false;
 
 const additions = [
   '<uses-permission android:name="android.permission.CAMERA" />',
+  // Mic: workout video recording with sound + voice commands (added 2026-10-08).
+  // android/ is gitignored, so a hand edit to the manifest is lost on every
+  // fresh `cap add android` (CI always starts fresh). It has to live here.
+  '<uses-permission android:name="android.permission.RECORD_AUDIO" />',
+  '<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />',
   '<uses-permission android:name="android.permission.WAKE_LOCK" />',
   '<uses-permission android:name="android.permission.VIBRATE" />',
   '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />',
